@@ -10,11 +10,9 @@ yfinance = {extras = ["optional"], version = "^0.2.44"}
 openpyxl = ">=3.1.0"
 ipykernel = "^6.29.5"
 cleanco = "^2.3"
-name-matching = "^0.8.12"
-investpy = "^1.0.8"
 yahooquery = "^2.3.7"
-streamlit = "^1.39.0"
 plotly = "^5.24.1"
+streamlit = "^1.40.0"
 
 
 [build-system]

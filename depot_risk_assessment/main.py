@@ -63,8 +63,6 @@ def main(
     sink_path: str,
     ticker_config: dict,
 ):
-    logger.error("This is an error")
-    logger.info("This is an info")
     depot = pd.read_csv(pathlib.Path(path_to_depot), header="infer", sep=";")
     depot = pd.concat([depot, depot.apply(get_info_for, axis=1)], axis=1)
     depot["Wert"] = depot["Price"] * depot[eval_date]
@@ -101,7 +99,7 @@ def main(
                 ]
             )
         )
-        < 0.1
+        < 0.2
     )
     add_amundi_info = get_infos_from_yahoo(amundi_merged, ex_isin_info)
     if len(add_amundi_info) > 0:
