@@ -1,59 +1,26 @@
 import logging
 import pathlib
-import typing
 from dataclasses import dataclass
 
 import pandas as pd
-import yfinance as yf
 
-from depot_risk_assessment.functions import (
-    download_zusammensetzung_as_csv,
-    get_info_for,
-    get_infos_from_yahoo,
-    merge_and_drop_col,
+from depot_risk_assessment.config import ETFHandler
+from depot_risk_assessment.finance_data import get_infos_for, get_infos_from_yahoo
+from depot_risk_assessment.mapping import sector_mapping
+from depot_risk_assessment.transform_etfs import (
     merge_same_editors,
-    prepare_amundi_data,
-    prepare_invesco_data,
-    prepare_ishare_data,
-    read_amundi_from,
-    read_invesco_xlsx,
-    read_ishare_from,
-    setup_root_logger,
+    prepare_data_by_isin,
+    prepare_data_by_ticker,
+    prepare_single_type,
     sum_and_replace,
-    sum_duplicates_by,
 )
-from depot_risk_assessment.mapping import (
-    country_mapping_ishare,
-    country_mapping_yahoo,
-    sector_mapping,
-    sektor_mapping_yahoo,
+from depot_risk_assessment.validation import (
+    validate_editor,
+    validate_etf,
+    validate_ishare,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def get_etf_info(ticker_config: dict, depot: pd.DataFrame):
-    etfs = ticker_config.copy()
-    for key, value in ticker_config.items():
-        total_value_etf = depot[depot["wkn"] == key]["Wert"].values[0]
-        if value["editor"] == "iShares":
-            url = value["url"]
-            path = value["file_path"]
-            download_zusammensetzung_as_csv(url, path)
-            df = read_ishare_from(path)
-            df = prepare_ishare_data(df, total_value_etf)
-        elif value["editor"] == "amundi":
-            path = value["file_path"]
-            df = read_amundi_from(path)
-            df = prepare_amundi_data(df, sector_mapping, total_value_etf)
-        else:
-            path = value["file_path"]
-            df = read_invesco_xlsx(path)
-            df = prepare_invesco_data(df, total_value_etf)
-        etfs[key]["zusammensetzung"] = df
-        etfs[key]["total_value"] = total_value_etf
-        etfs[key]["editor"] = value["editor"]
-    return etfs
 
 
 def main(
@@ -64,57 +31,43 @@ def main(
     ticker_config: dict,
 ):
     depot = pd.read_csv(pathlib.Path(path_to_depot), header="infer", sep=";")
-    depot = pd.concat([depot, depot.apply(get_info_for, axis=1)], axis=1)
+    infos = get_infos_for(depot["ticker"].to_list())
+    depot = pd.concat([depot, infos], axis=1)
     depot["Wert"] = depot["Price"] * depot[eval_date]
     depot["Percentage"] = depot["Wert"] / depot["Wert"].sum() * 100
-    print(f"Total value: {depot['Wert'].sum()}")
+    logging.info(f"Total value: {depot['Wert'].sum()}")
     # depot.groupby("type").agg({"Wert": "sum", "Percentage": "sum"})
     # After checking for new data, we can adjust the ISIN column
-    etfs = get_etf_info(ticker_config, depot)
+    etf_handler = ETFHandler.from_dict(ticker_config, depot, sector_mapping)
     depot[depot["type"] == "etf"]["Wert"].sum()
-    assert (
-        abs(
-            sum([etf["total_value"] for _, etf in etfs.items()])
-            - depot[depot["type"] == "etf"]["Wert"].sum()
-        )
-        < 0.01
-    )
+    validate_etf(etf_handler, depot[depot["type"] == "etf"]["Wert"].sum())
     ex_isin_info = pd.read_csv(pathlib.Path(path_to_isin_info), header="infer", sep=",")
+
+    # Prepare Amundi data
     amundi_merged = merge_same_editors(
-        [etf["zusammensetzung"] for etf in etfs.values() if etf["editor"] == "amundi"],
+        [etf.zusammensetzung for etf in etf_handler.etfs if etf.editor == "amundi"],
         ["ISIN", "Name", "Sektor", "Standort"],
         ["ISIN", "Name", "Sektor", "Standort", "Wert"],
     )
     amundi_merged = sum_and_replace(amundi_merged, "Wert")
-
-    # assert almost equal
-    assert (
-        abs(
-            amundi_merged["Wert"].sum()
-            - sum(
-                [
-                    etf["total_value"]
-                    for etf in etfs.values()
-                    if etf["editor"] == "amundi"
-                ]
-            )
-        )
-        < 0.2
-    )
+    validate_editor(etf_handler, amundi_merged["Wert"].sum(), "amundi")
     add_amundi_info = get_infos_from_yahoo(amundi_merged, ex_isin_info)
+
     if len(add_amundi_info) > 0:
-        print("New data found")
+        logger.info("New data found")
         ex_isin_info = pd.concat([ex_isin_info, add_amundi_info])
 
     # After checking for new data, we can adjust the ISIN column
     amundi_merged["ISIN"] = amundi_merged["ISIN"].fillna(amundi_merged["Name"])
     assert len(amundi_merged) == len(amundi_merged["ISIN"].unique())
+
+    # Prepare Invesco data
     invesco_df = [
-        etf["zusammensetzung"] for etf in etfs.values() if etf["editor"] == "invesco"
+        etf.zusammensetzung for etf in etf_handler.etfs if etf.editor == "invesco"
     ][0]
     add_invesco_info = get_infos_from_yahoo(invesco_df, ex_isin_info)
     if len(add_invesco_info) > 0:
-        print("New data found")
+        logger.info("New data found")
         ex_isin_info = pd.concat([ex_isin_info, add_invesco_info])
     # After checking for new data, we can adjust the ISIN column
     invesco_df["ISIN"] = invesco_df["ISIN"].fillna(invesco_df["Name"])
@@ -122,46 +75,15 @@ def main(
         "./data/isin_information.csv", index=False, sep=",", encoding="utf-8", mode="w"
     )
     ex_isin_info["Emittententicker"] = ex_isin_info["Symbol"].str.split(".").str[0]
-    # assert almost equal
-    assert (
-        abs(
-            invesco_df["Wert"].sum()
-            - sum(
-                [
-                    etf["total_value"]
-                    for etf in etfs.values()
-                    if etf["editor"] == "invesco"
-                ]
-            )
-        )
-        < 0.1
-    )
+    validate_editor(etf_handler, invesco_df["Wert"].sum(), "invesco")
     assert len(invesco_df) == len(invesco_df["ISIN"].unique())
+
+    # Merge Amundi and Invesco
     merged_isin = amundi_merged.merge(
         invesco_df[["Name", "ISIN", "Wert"]], on="ISIN", how="outer"
     )
-    merged_isin = sum_and_replace(merged_isin, "Wert")
-    merged_isin = merge_and_drop_col(merged_isin, "Name_x", "Name_y", "Name")
-    merged_isin = merged_isin.merge(ex_isin_info, on="ISIN", how="left")
-    assert (
-        abs(
-            invesco_df["Wert"].sum()
-            + amundi_merged["Wert"].sum()
-            - merged_isin["Wert"].sum()
-        )
-        < 0.1
-    )
-
-    merged_isin["Standort_y"] = merged_isin["Standort_y"].map(country_mapping_yahoo)
-    merged_isin = merge_and_drop_col(
-        merged_isin, "Standort_x", "Standort_y", "Standort"
-    )
-    merged_isin["Sektor_y"] = merged_isin["Sektor_y"].map(sektor_mapping_yahoo)
-    merged_isin = merge_and_drop_col(merged_isin, "Sektor_x", "Sektor_y", "Sektor")
-    merged_isin = merge_and_drop_col(merged_isin, "Name_x", "Name_y", "Name")
     merge_cols = ["Emittententicker", "Standort"]
-    merged_isin = sum_duplicates_by(merged_isin, "Wert", merge_cols)
-    merged_isin = merged_isin.drop(columns=["ISIN", "Symbol"])
+    merged_isin = prepare_data_by_isin(merged_isin, ex_isin_info, merge_cols)
     assert (
         abs(
             invesco_df["Wert"].sum()
@@ -169,13 +91,9 @@ def main(
             - merged_isin["Wert"].sum()
         )
         < 0.1
-    )
-    merged_isin["Standort"] = merged_isin["Standort"].replace(country_mapping_ishare)
-    merged_isin["Emittententicker"] = merged_isin["Emittententicker"].fillna(
-        merged_isin["Name"]
     )
     ishares_merged = merge_same_editors(
-        [etf["zusammensetzung"] for etf in etfs.values() if etf["editor"] == "iShares"],
+        [etf.zusammensetzung for etf in etf_handler.etfs if etf.editor == "iShares"],
         ["Emittententicker", "Name", "Sektor", "Standort"],
         ["Emittententicker", "Name", "Sektor", "Standort", "Wert"],
     )
@@ -186,81 +104,20 @@ def main(
     ishares_merged["Emittententicker"] = ishares_merged["Emittententicker"].str.replace(
         " ", "-"
     )
-    # assert almost equal
-    assert (
-        abs(
-            ishares_merged["Wert"].sum()
-            - sum(
-                [
-                    etf["total_value"]
-                    for etf in etfs.values()
-                    if etf["editor"] == "iShares"
-                ]
-            )
-        )
-        < 1
-    )
-    assert ishares_merged["Emittententicker"].isna().sum() == 0
-    assert ishares_merged["Standort"].isna().sum() == 0
-    assert ishares_merged["Wert"].isna().sum() == 0
-    assert (
-        ishares_merged.groupby(["Emittententicker", "Standort"]).agg(
-            {"Standort": "count"}
-        )
-        > 1
-    )["Standort"].sum() == 0
-    merged_df = ishares_merged.merge(
-        merged_isin, on=["Emittententicker", "Standort"], how="outer"
-    )
-    merged_df["Name"] = merged_df["Name_x"].fillna(merged_df["Name_y"])
-    merged_df = sum_and_replace(merged_df, "Wert")
-    merged_df = merge_and_drop_col(merged_df, "Name_x", "Name_y", "Name")
-    merged_df = merge_and_drop_col(merged_df, "Sektor_x", "Sektor_y", "Sektor")
-    df_grouped = merged_df.groupby("Name").agg({"Wert": "sum"})
-    merged_df = merged_df.drop_duplicates(subset=["Name"]).drop(columns=["Wert"])
-    merged_df = merged_df.merge(df_grouped, on="Name", how="left")
-    multiple_ticker = merged_df.groupby("Emittententicker").agg(
-        {"Name": "count", "Sektor": "count", "Standort": "count"}
-    )
-    multiple_ticker = multiple_ticker[multiple_ticker["Name"] > 1]
-    merged_df[merged_df["Emittententicker"].isin(multiple_ticker.index)]
-    merged_df[merged_df["Standort"].isna()]
-    assert (
-        abs(
-            merged_df["Wert"].sum() - sum([etf["total_value"] for etf in etfs.values()])
-        )
-        < 1
-    )
-    merged_df["Type"] = "ETF"
-    aktien_depot = depot[depot["type"] == "aktie"][
-        ["info", "ticker", "Wert", "Standort", "Sektor"]
-    ].copy()
-    aktien_depot = aktien_depot.rename(
-        columns={"info": "Name", "ticker": "Emittententicker"}
-    )
-    aktien_depot["Name"] = aktien_depot["Name"].str.upper()
-    aktien_depot["Emittententicker"] = (
-        aktien_depot["Emittententicker"].str.split(".").str[0]
-    )
-    aktien_depot["Standort"] = aktien_depot["Standort"].map(country_mapping_yahoo)
-    aktien_depot["Standort"] = aktien_depot["Standort"].replace(country_mapping_ishare)
-    aktien_depot["Sektor"] = aktien_depot["Sektor"].map(sektor_mapping_yahoo)
-    aktien_depot["Type"] = "Aktie"
+    validate_ishare(ishares_merged, etf_handler)
 
-    krypto_depot = depot[depot["type"] == "krypto"][
-        ["info", "ticker", "Wert", "Standort", "Sektor"]
-    ].copy()
-    krypto_depot = krypto_depot.rename(
-        columns={"info": "Name", "ticker": "Emittententicker"}
+    merged_df = ishares_merged.merge(merged_isin, on=merge_cols, how="outer")
+    merged_df = prepare_data_by_ticker(merged_df)
+    assert (
+        abs(
+            merged_df["Wert"].sum() - sum([etf.total_value for etf in etf_handler.etfs])
+        )
+        < 1
     )
-    krypto_depot["Name"] = krypto_depot["Name"].str.upper()
-    krypto_depot["Emittententicker"] = (
-        krypto_depot["Emittententicker"].str.split(".").str[0]
-    )
-    krypto_depot["Standort"] = krypto_depot["Standort"].map(country_mapping_yahoo)
-    krypto_depot["Standort"] = krypto_depot["Standort"].replace(country_mapping_ishare)
-    krypto_depot["Sektor"] = krypto_depot["Sektor"].map(sektor_mapping_yahoo)
-    krypto_depot["Type"] = "Krypto"
+
+    # Prepare Aktien
+    aktien_depot = prepare_single_type(depot, "aktie")
+    krypto_depot = prepare_single_type(depot, "krypto")
 
     depot_merged = pd.concat([merged_df, aktien_depot, krypto_depot], axis=0)
 
@@ -279,21 +136,6 @@ def main(
 
 if __name__ == "__main__":
     eval_date = "06.11.2024"
-
-    @dataclass
-    class Ticker:
-        editor: str
-        url: str | None
-        file_path: str
-
-    @dataclass
-    class TickerHandler:
-        tickers: list[Ticker]
-
-        @classmethod
-        def from_dict(cls: typing.Type["TickerHandler"], data: dict) -> "TickerHandler":
-            tickers = [Ticker(**ticker) for ticker in data]
-            return TickerHandler(tickers=tickers)
 
     ticker_config = {
         "A2DVB9": {

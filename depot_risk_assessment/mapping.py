@@ -12,7 +12,8 @@ sector_mapping = {
     " ": None,
     "nan": None,
 }
-sektor_mapping_yahoo = {
+
+sector_mapping_yahoo = {
     "Technology": "IT",
     "Communication Services": "Kommunikation",
     "Consumer Cyclical": "Zyklische Konsumgüter",
@@ -26,6 +27,7 @@ sektor_mapping_yahoo = {
     "Real Estate": "Immobilien",
     None: None,
 }
+
 country_mapping_yahoo = {
     "Austria": "Österreich",
     "Germany": "Deutschland",
@@ -49,6 +51,7 @@ country_mapping_yahoo = {
     "Uruguay": "Uruguay",
     "Israel": "Israel",
 }
+
 country_mapping_ishare = {
     "USA": "Vereinigte Staaten",
     "Großbritannien": "Vereinigtes Königreich",
