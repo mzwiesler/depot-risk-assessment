@@ -21,12 +21,12 @@ def read_ishare_from(file_path: pathlib.Path) -> pd.DataFrame:
     return pd.read_csv(file_path, header="infer", sep=",", skiprows=2)
 
 
-def read_invesco_xlsx(file_path: pathlib.Path) -> pd.DataFrame:
-    return pd.read_excel(file_path, header=1, skiprows=4)
+def read_invesco_csv(file_path: pathlib.Path) -> pd.DataFrame:
+    return pd.read_csv(file_path, header=1, skiprows=4)
 
 
 def read_amundi_from(file_path: pathlib.Path) -> pd.DataFrame:
-    df = pd.read_csv(file_path, header="infer", skiprows=19, sep=";")
+    df = pd.read_csv(file_path, header="infer", skiprows=19, sep=",")
     df = df[~df["Gewichtung"].isna()]
     return df
 
@@ -38,16 +38,14 @@ def download_zusammensetzung_as_csv(url: str, file_path: pathlib.Path) -> None:
     if response.status_code == 200:
         with open(file_path, "wb") as file:
             file.write(response.content)
-        print("CSV file downloaded successfully.")
+        logger.info("CSV file downloaded successfully.")
     else:
-        print(f"Failed to download CSV file. Status code: {response.status_code}")
+        logger.error(f"Failed to download CSV file. Status code: {response.status_code}")
 
 
 def prepare_company_name(col: pd.Series) -> pd.Series:
     col_lower = col.str.lower()
-    col_encoded = col_lower.apply(
-        lambda x: unicodedata.normalize("NFKD", x).encode("ASCII", "ignore").decode()
-    )
+    col_encoded = col_lower.apply(lambda x: unicodedata.normalize("NFKD", x).encode("ASCII", "ignore").decode())
     # substitute dash with space
     col_re = col_encoded.apply(lambda x: re.sub(r"-", " ", x))
     col_re = col_re.apply(lambda x: re.sub(r"[^\w\s]", "", x))
@@ -59,9 +57,7 @@ def aggregate_gewichtung_by(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     return df.groupby(cols).agg({"Gewichtung": "sum"}).reset_index()
 
 
-def sum_duplicates_by(
-    df: pd.DataFrame, col_sum: str, cols_group: list[str]
-) -> pd.DataFrame:
+def sum_duplicates_by(df: pd.DataFrame, col_sum: str, cols_group: list[str]) -> pd.DataFrame:
     df_grouped = df.groupby(cols_group, dropna=False).agg({col_sum: "sum"})
     df = df.drop_duplicates(subset=cols_group)
     df = df.drop(columns=[col_sum])
@@ -77,9 +73,7 @@ def prepare_amundi_data(
     # Cleaning
     df = df.drop(columns="Unnamed: 0")
     df["Name"] = df["Name"].fillna(df["Anlageklasse"])
-    df["Gewichtung"] = (
-        df["Gewichtung"].str.replace("%", "").str.replace(",", ".").astype(float)
-    )
+    # df["Gewichtung"] = df["Gewichtung"].str.replace("%", "").str.replace(",", ".").astype(float)
     df = df[df["Gewichtung"] != 0]
     df = df.rename(columns={"Land": "Standort"})
     df["Sektor"] = df["Sektor"].map(sector_mapping)
@@ -106,19 +100,17 @@ def prepare_invesco_data(df: pd.DataFrame, value: float) -> pd.DataFrame:
 def prepare_ishare_data(df: pd.DataFrame, value: float) -> pd.DataFrame:
     df = df.rename(columns={"Gewichtung (%)": "Gewichtung", "Marktwährung": "Währung"})
     df = df[df["Name"].notnull()]
+    if "Sector" in df.columns:
+        df = df.rename(columns={"Sector": "Sektor"})
     df["Sektor"] = df["Sektor"].str.strip()
-    df["Gewichtung"] = (
-        df["Gewichtung"].str.replace("%", "").str.replace(",", ".").astype(float)
-    )
+    df["Gewichtung"] = df["Gewichtung"].str.replace("%", "").str.replace(",", ".").astype(float)
     df = df[df["Gewichtung"] != 0]
     df["Gewichtung"] = rescale(df["Gewichtung"])
     df["Wert"] = round(df["Gewichtung"] * value / 100, 2)
     return df
 
 
-def merge_same_editors(
-    dfs: list[pd.DataFrame], merge_cols: list[str], col_to_keep: list[str]
-) -> pd.DataFrame:
+def merge_same_editors(dfs: list[pd.DataFrame], merge_cols: list[str], col_to_keep: list[str]) -> pd.DataFrame:
     dfs = [df[col_to_keep] for df in dfs]
     # merge all dataframes in list on merge_cols using functools
     df = reduce(lambda x, y: x.merge(y, on=merge_cols, how="outer"), dfs)
@@ -134,24 +126,18 @@ def sum_and_replace(df: pd.DataFrame, col_contains: str) -> pd.DataFrame:
     return df
 
 
-def merge_and_drop_col(
-    df: pd.DataFrame, col1: str, col2: str, new_col: str
-) -> pd.DataFrame:
+def merge_and_drop_col(df: pd.DataFrame, col1: str, col2: str, new_col: str) -> pd.DataFrame:
     df[new_col] = df[col1].fillna(df[col2])
     df = df.drop(columns=[col1, col2])
     return df
 
 
-def prepare_data_by_isin(
-    df: pd.DataFrame, ex_isin_info: pd.DataFrame, merge_cols: list[str]
-) -> pd.DataFrame:
+def prepare_data_by_isin(df: pd.DataFrame, ex_isin_info: pd.DataFrame, merge_cols: list[str]) -> pd.DataFrame:
     merged_isin = sum_and_replace(df, "Wert")
     merged_isin = merge_and_drop_col(merged_isin, "Name_x", "Name_y", "Name")
     merged_isin = merged_isin.merge(ex_isin_info, on="ISIN", how="left")
     merged_isin["Standort_y"] = merged_isin["Standort_y"].map(country_mapping_yahoo)
-    merged_isin = merge_and_drop_col(
-        merged_isin, "Standort_x", "Standort_y", "Standort"
-    )
+    merged_isin = merge_and_drop_col(merged_isin, "Standort_x", "Standort_y", "Standort")
     merged_isin["Sektor_y"] = merged_isin["Sektor_y"].map(sector_mapping_yahoo)
     merged_isin = merge_and_drop_col(merged_isin, "Sektor_x", "Sektor_y", "Sektor")
     merged_isin = merge_and_drop_col(merged_isin, "Name_x", "Name_y", "Name")
@@ -159,9 +145,7 @@ def prepare_data_by_isin(
     merged_isin = sum_duplicates_by(merged_isin, "Wert", merge_cols)
     merged_isin = merged_isin.drop(columns=["ISIN", "Symbol"])
     merged_isin["Standort"] = merged_isin["Standort"].replace(country_mapping_ishare)
-    merged_isin["Emittententicker"] = merged_isin["Emittententicker"].fillna(
-        merged_isin["Name"]
-    )
+    merged_isin["Emittententicker"] = merged_isin["Emittententicker"].fillna(merged_isin["Name"])
     return merged_isin
 
 
@@ -173,9 +157,7 @@ def prepare_data_by_ticker(df: pd.DataFrame) -> pd.DataFrame:
     df_grouped = df.groupby("Name").agg({"Wert": "sum"})
     df = df.drop_duplicates(subset=["Name"]).drop(columns=["Wert"])
     df = df.merge(df_grouped, on="Name", how="left")
-    multiple_ticker = df.groupby("Emittententicker").agg(
-        {"Name": "count", "Sektor": "count", "Standort": "count"}
-    )
+    multiple_ticker = df.groupby("Emittententicker").agg({"Name": "count", "Sektor": "count", "Standort": "count"})
     multiple_ticker = multiple_ticker[multiple_ticker["Name"] > 1]
     df[df["Emittententicker"].isin(multiple_ticker.index)]
     df[df["Standort"].isna()]
@@ -184,16 +166,10 @@ def prepare_data_by_ticker(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_single_type(depot: pd.DataFrame, type: str) -> pd.DataFrame:
-    type_depot = depot[depot["type"] == type][
-        ["info", "ticker", "Wert", "Standort", "Sektor"]
-    ].copy()
-    type_depot = type_depot.rename(
-        columns={"info": "Name", "ticker": "Emittententicker"}
-    )
+    type_depot = depot[depot["type"] == type][["info", "ticker", "Wert", "Standort", "Sektor"]].copy()
+    type_depot = type_depot.rename(columns={"info": "Name", "ticker": "Emittententicker"})
     type_depot["Name"] = type_depot["Name"].str.upper()
-    type_depot["Emittententicker"] = (
-        type_depot["Emittententicker"].str.split(".").str[0]
-    )
+    type_depot["Emittententicker"] = type_depot["Emittententicker"].str.split(".").str[0]
     type_depot["Standort"] = type_depot["Standort"].map(country_mapping_yahoo)
     type_depot["Standort"] = type_depot["Standort"].replace(country_mapping_ishare)
     type_depot["Sektor"] = type_depot["Sektor"].map(sector_mapping_yahoo)

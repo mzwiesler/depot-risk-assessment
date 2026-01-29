@@ -1,5 +1,4 @@
 import logging
-from functools import reduce
 
 import numpy as np
 import pandas as pd
@@ -10,13 +9,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_ticker_info(ticker: str) -> dict:
-    try:
-        logger.debug(f"Getting info for {ticker}")
-        info = yf.Ticker(ticker).info
-        logger.debug(f"Info for {ticker} received")
-    except TimeoutError:
-        logger.error(f"Timeout error for {ticker}")
-        info = yf.Ticker(ticker).info
+    # session = requests.Session(impersonate="chrome")
+
+    logger.debug(f"Getting info for {ticker}")
+    info = yf.Ticker(ticker).get_info()
+    logger.debug(f"Info for {ticker} received")
 
     return info
 
@@ -31,10 +28,10 @@ def get_info_from_yahoo(quote: str) -> dict | None:
             "Standort": info.get("country", None),
         }
     except KeyError as e:
-        print(f"Key error: {e}")
+        logger.error(f"Getting info from yahoo for {quote} failed with Key Error: {e}")
         return None
     except IndexError as e:
-        print(e)
+        logger.error(f"Getting info from yahoo for {quote} failed with {e}")
         return None
 
 
@@ -48,19 +45,20 @@ def get_infos_from_yahoo(df: pd.DataFrame, ex_info: pd.DataFrame) -> pd.DataFram
                 continue
             if stock_isin in ex_info["ISIN"].values:
                 continue
-            print(stock_isin)
-            print(name)
+
             y_info = get_info_from_yahoo(stock_isin)
             if y_info is None:
+                logger.info(f"Getting info for {stock_isin} did return None. Trying with name {name}")
                 y_info = get_info_from_yahoo(name)
             if y_info is None:
+                logger.info(f"Getting info for {stock_isin} with name {name} did return None")
                 continue
             y_info["ISIN"] = stock_isin
             y_info["Name"] = name
             new_data.append(y_info)
         return pd.DataFrame(new_data)
     except Exception as e:
-        print(e)
+        logger.error(e)
         return pd.DataFrame(new_data)
 
 
@@ -86,15 +84,3 @@ def get_info_for(ticker: str) -> dict[str, str | float]:
     result["Standort"] = info.get("country", None)
 
     return result
-
-
-def validate_wert_for(wert: pd.Series, editor: str, total_value: pd.Series) -> None:
-    assert (
-        abs(
-            wert.sum()
-            - sum(
-                [etf["total_value"] for etf in etfs.values() if etf["editor"] == editor]
-            )
-        )
-        < 0.2
-    )
