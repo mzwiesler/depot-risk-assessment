@@ -1,4 +1,9 @@
 ticker_config = {
+    "A2AQST": {
+        "editor": "xtrackers",
+        "url": "https://etf.dws.com/etfdata/export/DEU/DEU/excel/product/constituent/IE00BZ02LR44/",
+        "file_name": "Constituent_IE00BZ02LR44",
+    },
     "A2DVB9": {
         "editor": "iShares",
         "url": "https://www.ishares.com/de/privatanleger/de/produkte/290846/fund/1478358465952.ajax?fileType=csv&fileName=2B7K_holdings&dataType=fund",
@@ -28,5 +33,10 @@ ticker_config = {
         "editor": "invesco",
         "url": "https://www.invesco.com/de/de/financial-products/etfs/invesco-eqqq-nasdaq-100-ucits-etf-acc.html#Positionen",
         "file_name": "Die_10_größten_Positionen-holdings",
+    },
+    "A3DNRY": {
+        "editor": "hanetf",
+        "url": "https://etp.hanetf.com/INQQ-holdings",
+        "file_name": "Holdings-INQQ-IE000WYTQSF9-all-all",
     },
 }

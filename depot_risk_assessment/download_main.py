@@ -3,6 +3,7 @@ import shutil
 from typing import Callable
 
 import requests
+from depot_risk_assessment.download_hanetf import download_hanetf_report
 from depot_risk_assessment.ticker_config import ticker_config
 from depot_risk_assessment.download_amundi import download_amundi_report
 from depot_risk_assessment.download_invesco import download_invesco_report
@@ -62,6 +63,8 @@ editor_download_functions: dict[str, Callable[[TickerConfig, str], bool]] = {
     "amundi": download_wrapper(download_amundi_report),
     "invesco": download_wrapper(download_invesco_report),
     "iShares": download_url_as_csv,
+    "hanetf": download_wrapper(download_hanetf_report),
+    "xtrackers": download_wrapper(download_hanetf_report),
 }
 
 # Convert dictionary to TickerConfig objects
@@ -88,7 +91,11 @@ for config in ticker_configs:
 for ticker, status in success.items():
     print(f"Download for {ticker} successful: {status}")
 
-if any(not s for s in success.values()):
-    raise Exception("Some downloads failed.")  # TODO: Create downlaod exception
+errors = []
+for ticker, status in success.items():
+    if not status:
+        errors.append(f"Download failed for {ticker}")
+if errors:
+    raise Exception(f"Download errors occurred: {', '.join(errors)}")  # TODO: Create download exception
 
 print("All downloads completed successfully.")
