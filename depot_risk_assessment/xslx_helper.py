@@ -50,9 +50,11 @@ def read_xlsx_file_without_styles(file_path: str) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    holdings_df = read_xlsx_file_without_styles(
-        "downloads/Fondszusammensetzung_Amundi S&P World Health Care Screened UCITS ETF Acc_IE0006FM6MI8_07_01_2026.xlsx"
+    path = (
+        "downloads/Fondszusammensetzung_Amundi S&P World Health Care"
+        " Screened UCITS ETF Acc_IE0006FM6MI8_07_01_2026.xlsx"
     )
+    holdings_df = read_xlsx_file_without_styles(path)
     print(f"\nDataFrame shape: {holdings_df}")
-    print(f"\nDataFrame info:")
+    print("\nDataFrame info:")
     print(holdings_df.to_csv("downloads/holdings.csv", index=False, header=False))

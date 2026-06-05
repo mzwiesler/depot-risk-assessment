@@ -3,14 +3,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from depot_risk_assessment.etf_transformations import (
-    prepare_amundi_data,
-    prepare_invesco_data,
-    prepare_ishare_data,
-    read_amundi_from,
-    read_invesco_csv,
-    read_ishare_from,
-)
+from depot_risk_assessment.providers import get_provider
 
 
 @dataclass
@@ -47,18 +40,10 @@ class ETFHandler:
             ticker_config = TickerConfig(
                 wkn=key, editor=value["editor"], url=value.get("url", None), file_name=value["file_name"]
             )
-            if value["editor"] == "iShares":
-                path = ticker_config.file_path(pathlib.Path(folder))
-                df = read_ishare_from(path)
-                df = prepare_ishare_data(df, total_value_etf)
-            elif value["editor"] == "amundi":
-                path = ticker_config.file_path(pathlib.Path(folder))
-                df = read_amundi_from(path)
-                df = prepare_amundi_data(df, sector_mapping, total_value_etf)
-            else:
-                path = ticker_config.file_path(pathlib.Path(folder))
-                df = read_invesco_csv(path)
-                df = prepare_invesco_data(df, total_value_etf)
+            provider = get_provider(value["editor"])
+            path = ticker_config.file_path(pathlib.Path(folder))
+            df = provider.read(path)
+            df = provider.normalize(df, total_value_etf, sector_mapping)
             etf = ETFConfig(
                 ticker_config,
                 df,

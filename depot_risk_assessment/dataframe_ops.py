@@ -1,12 +1,7 @@
 import logging
-import pathlib
-import re
-import unicodedata
 from functools import reduce
 
 import pandas as pd
-import requests
-from cleanco import basename
 
 from depot_risk_assessment.mapping import (
     country_mapping_ishare,
@@ -17,40 +12,8 @@ from depot_risk_assessment.mapping import (
 logger = logging.getLogger(__name__)
 
 
-def read_ishare_from(file_path: pathlib.Path) -> pd.DataFrame:
-    return pd.read_csv(file_path, header="infer", sep=",", skiprows=2)
-
-
-def read_invesco_csv(file_path: pathlib.Path) -> pd.DataFrame:
-    return pd.read_csv(file_path, header=1, skiprows=4)
-
-
-def read_amundi_from(file_path: pathlib.Path) -> pd.DataFrame:
-    df = pd.read_csv(file_path, header="infer", skiprows=19, sep=",")
-    df = df[~df["Gewichtung"].isna()]
-    return df
-
-
-def download_zusammensetzung_as_csv(url: str, file_path: pathlib.Path) -> None:
-    response = requests.get(url)
-
-    # Check if the request was successful
-    if response.status_code == 200:
-        with open(file_path, "wb") as file:
-            file.write(response.content)
-        logger.info("CSV file downloaded successfully.")
-    else:
-        logger.error(f"Failed to download CSV file. Status code: {response.status_code}")
-
-
-def prepare_company_name(col: pd.Series) -> pd.Series:
-    col_lower = col.str.lower()
-    col_encoded = col_lower.apply(lambda x: unicodedata.normalize("NFKD", x).encode("ASCII", "ignore").decode())
-    # substitute dash with space
-    col_re = col_encoded.apply(lambda x: re.sub(r"-", " ", x))
-    col_re = col_re.apply(lambda x: re.sub(r"[^\w\s]", "", x))
-    col_base = col_re.apply(lambda x: basename(x))
-    return col_base
+def rescale(col: pd.Series) -> pd.Series:
+    return round(100 * col / sum(col), 8)
 
 
 def aggregate_gewichtung_by(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
@@ -65,54 +28,8 @@ def sum_duplicates_by(df: pd.DataFrame, col_sum: str, cols_group: list[str]) -> 
     return result
 
 
-def prepare_amundi_data(
-    df: pd.DataFrame,
-    sector_mapping: dict[str, str],
-    value: float,
-) -> pd.DataFrame:
-    # Cleaning
-    df = df.drop(columns="Unnamed: 0")
-    df["Name"] = df["Name"].fillna(df["Anlageklasse"])
-    # df["Gewichtung"] = df["Gewichtung"].str.replace("%", "").str.replace(",", ".").astype(float)
-    df = df[df["Gewichtung"] != 0]
-    df = df.rename(columns={"Land": "Standort"})
-    df["Sektor"] = df["Sektor"].map(sector_mapping)
-    df["Gewichtung"] = rescale(df["Gewichtung"])
-    df["Wert"] = round(df["Gewichtung"] * value / 100, 2)
-    return df
-
-
-def rescale(col: pd.Series) -> pd.Series:
-    return round(100 * col / sum(col), 8)
-
-
-def prepare_invesco_data(df: pd.DataFrame, value: float) -> pd.DataFrame:
-    df = df[~df["Weight"].isna()]
-    df = df.rename(columns={"Full name": "Name", "Weight": "Gewichtung"})
-    df["Name"] = df["Name"].str.split("USD").str[0].str.strip()
-    # After checking for new data, we can adjust the ISIN column
-    df["ISIN"] = df["ISIN"].fillna(df["Name"])
-    df["Gewichtung"] = rescale(df["Gewichtung"])
-    df["Wert"] = round(df["Gewichtung"] * value / 100, 2)
-    return df
-
-
-def prepare_ishare_data(df: pd.DataFrame, value: float) -> pd.DataFrame:
-    df = df.rename(columns={"Gewichtung (%)": "Gewichtung", "Marktwährung": "Währung"})
-    df = df[df["Name"].notnull()]
-    if "Sector" in df.columns:
-        df = df.rename(columns={"Sector": "Sektor"})
-    df["Sektor"] = df["Sektor"].str.strip()
-    df["Gewichtung"] = df["Gewichtung"].str.replace("%", "").str.replace(",", ".").astype(float)
-    df = df[df["Gewichtung"] != 0]
-    df["Gewichtung"] = rescale(df["Gewichtung"])
-    df["Wert"] = round(df["Gewichtung"] * value / 100, 2)
-    return df
-
-
 def merge_same_editors(dfs: list[pd.DataFrame], merge_cols: list[str], col_to_keep: list[str]) -> pd.DataFrame:
     dfs = [df[col_to_keep] for df in dfs]
-    # merge all dataframes in list on merge_cols using functools
     df = reduce(lambda x, y: x.merge(y, on=merge_cols, how="outer"), dfs)
     return df
 
@@ -133,8 +50,11 @@ def merge_and_drop_col(df: pd.DataFrame, col1: str, col2: str, new_col: str) -> 
 
 
 def prepare_data_by_isin(df: pd.DataFrame, ex_isin_info: pd.DataFrame, merge_cols: list[str]) -> pd.DataFrame:
-    merged_isin = sum_and_replace(df, "Wert")
-    merged_isin = merge_and_drop_col(merged_isin, "Name_x", "Name_y", "Name")
+    merged_isin = df.copy()
+    if "Wert_x" in merged_isin.columns or "Wert_y" in merged_isin.columns:
+        merged_isin = sum_and_replace(merged_isin, "Wert")
+    if "Name_x" in merged_isin.columns and "Name_y" in merged_isin.columns:
+        merged_isin = merge_and_drop_col(merged_isin, "Name_x", "Name_y", "Name")
     merged_isin = merged_isin.merge(ex_isin_info, on="ISIN", how="left")
     merged_isin["Standort_y"] = merged_isin["Standort_y"].map(country_mapping_yahoo)
     merged_isin = merge_and_drop_col(merged_isin, "Standort_x", "Standort_y", "Standort")

@@ -1,59 +1,27 @@
-sector_mapping = {
-    "Industrie": "Industrie",
-    "Gesundheitswesen": "Gesundheitsversorgung",
-    "Basiskonsumgüter": "Nichtzyklische Konsumgüter",
-    "Informationstechnologie": "IT",
-    "Finanzdienstleistungen": "Financials",
-    "Nicht-Basiskonsumgüter": "Zyklische Konsumgüter",
-    "Werkstoffe": "Materialien",
-    "Kommunikationsdienstleistungen": "Kommunikation",
-    "Versorger": "Versorger",
-    "Immobilien": "Immobilien",
-    " ": None,
-    "nan": None,
-}
+import tomllib
+from pathlib import Path
 
-sector_mapping_yahoo = {
-    "Technology": "IT",
-    "Communication Services": "Kommunikation",
-    "Consumer Cyclical": "Zyklische Konsumgüter",
-    "Consumer Defensive": "Nichtzyklische Konsumgüter",
-    "Basic Materials": "Materialien",
-    "Healthcare": "Gesundheitsversorgung",
-    "Industrials": "Industrie",
-    "Utilities": "Versorger",
-    "Financial Services": "Financials",
-    "Energy": "Energie",
-    "Real Estate": "Immobilien",
-    None: None,
-}
+_MAPPINGS_PATH = Path(__file__).parent.parent / "data" / "mappings.toml"
 
-country_mapping_yahoo = {
-    "Austria": "Österreich",
-    "Germany": "Deutschland",
-    "Australia": "Australien",
-    "Belgium": "Belgien",
-    "Switzerland": "Schweiz",
-    "Denmark": "Dänemark",
-    "Spain": "Spanien",
-    "Finland": "Finnland",
-    "France": "Frankreich",
-    "United Kingdom": "Großbritannien",
-    "United States": "USA",
-    "Ireland": "Irland",
-    "Italy": "Italien",
-    "Japan": "Japan",
-    "Netherlands": "Niederlande",
-    "Norway": "Norwegen",
-    "New Zealand": "NEW_ZEALAND",
-    "Sweden": "Schweden",
-    "Canada": "Kanada",
-    "Uruguay": "Uruguay",
-    "Israel": "Israel",
-}
 
-country_mapping_ishare = {
-    "USA": "Vereinigte Staaten",
-    "Großbritannien": "Vereinigtes Königreich",
-    "NEW_ZEALAND": "Neuseeland",
-}
+def _load() -> dict:
+    with open(_MAPPINGS_PATH, "rb") as f:
+        return tomllib.load(f)
+
+
+def _parse_mapping(raw: dict[str, str]) -> dict[str | None, str | None]:
+    result: dict[str | None, str | None] = {}
+    for key, value in raw.items():
+        parsed_value = value if value != "" else None
+        result[key] = parsed_value
+    return result
+
+
+_data = _load()
+
+sector_mapping: dict[str | None, str | None] = _parse_mapping(_data["sector_mapping"])
+sector_mapping_yahoo: dict[str | None, str | None] = _parse_mapping(_data["sector_mapping_yahoo"])
+sector_mapping_yahoo[None] = None
+
+country_mapping_yahoo: dict[str | None, str | None] = _parse_mapping(_data["country_mapping_yahoo"])
+country_mapping_ishare: dict[str, str] = _data["country_mapping_ishare"]

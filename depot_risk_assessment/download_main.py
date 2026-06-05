@@ -29,7 +29,7 @@ def download_url_as_csv(config: TickerConfig, directory: str = "downloads") -> b
     return True
 
 
-def download_wrapper(download_func):
+def download_wrapper(download_func: Callable[[str, str], bool]) -> Callable[[TickerConfig, str], bool]:
     def download_and_convert_xlsx(config: TickerConfig, directory: str = "downloads") -> bool:
         """Generic function to download ETF report, read xlsx, and save as CSV."""
         success = download_func(config.url, directory)

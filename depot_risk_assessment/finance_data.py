@@ -1,65 +1,48 @@
 import logging
 
-import numpy as np
 import pandas as pd
-import yahooquery as yq
 import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
+_eur_rate: float | None = None
+
+
+def _get_eur_rate() -> float:
+    global _eur_rate
+    if _eur_rate is None:
+        info = yf.Ticker("EUR=X").get_info()
+        _eur_rate = info.get("open", info.get("previousClose", 1.0))
+        logger.info(f"Cached EUR/USD rate: {_eur_rate}")
+    return _eur_rate
+
 
 def get_ticker_info(ticker: str) -> dict:
-    # session = requests.Session(impersonate="chrome")
-
     logger.debug(f"Getting info for {ticker}")
     info = yf.Ticker(ticker).get_info()
     logger.debug(f"Info for {ticker} received")
-
     return info
 
 
-def get_info_from_yahoo(quote: str) -> dict | None:
+def get_info_for(ticker: str) -> dict[str, str | float]:
     try:
-        symbol = yq.search(quote)["quotes"][0]["symbol"]
-        info = get_ticker_info(symbol)
-        return {
-            "Symbol": symbol,
-            "Sektor": info.get("sector", None),
-            "Standort": info.get("country", None),
-        }
-    except KeyError as e:
-        logger.error(f"Getting info from yahoo for {quote} failed with Key Error: {e}")
-        return None
-    except IndexError as e:
-        logger.error(f"Getting info from yahoo for {quote} failed with {e}")
-        return None
-
-
-def get_infos_from_yahoo(df: pd.DataFrame, ex_info: pd.DataFrame) -> pd.DataFrame:
-    new_data = []
-    try:
-        for i in range(len(df)):
-            stock_isin = df["ISIN"][i]
-            name = df["Name"][i]
-            if stock_isin is np.nan:
-                continue
-            if stock_isin in ex_info["ISIN"].values:
-                continue
-
-            y_info = get_info_from_yahoo(stock_isin)
-            if y_info is None:
-                logger.info(f"Getting info for {stock_isin} did return None. Trying with name {name}")
-                y_info = get_info_from_yahoo(name)
-            if y_info is None:
-                logger.info(f"Getting info for {stock_isin} with name {name} did return None")
-                continue
-            y_info["ISIN"] = stock_isin
-            y_info["Name"] = name
-            new_data.append(y_info)
-        return pd.DataFrame(new_data)
+        info = get_ticker_info(ticker)
     except Exception as e:
-        logger.error(e)
-        return pd.DataFrame(new_data)
+        logger.warning(f"Failed to get info for {ticker}: {e}")
+        return {"Price": float("nan"), "Sektor": None, "Standort": None}
+
+    price = info.get("open", info.get("previousClose", 0))
+    logger.info(f"Price for {ticker} is {price}")
+
+    if info.get("currency") == "USD":
+        logger.info("Currency is USD, converting to EUR")
+        price = price * _get_eur_rate()
+
+    return {
+        "Price": price,
+        "Sektor": info.get("sector", None),
+        "Standort": info.get("country", None),
+    }
 
 
 def get_infos_for(tickers: list[str]) -> pd.DataFrame:
@@ -68,19 +51,3 @@ def get_infos_for(tickers: list[str]) -> pd.DataFrame:
         info = get_info_for(ticker)
         infos.append(info)
     return pd.DataFrame(infos)
-
-
-def get_info_for(ticker: str) -> dict[str, str | float]:
-    info = get_ticker_info(ticker)
-    result = {}
-    price = info.get("open", info.get("previousClose", 0))
-    logger.info(f"Price for {ticker} is {price}")
-    if info.get("currency") == "USD":
-        logger.info("Currency is USD")
-        eur = get_ticker_info("EUR=X")
-        price = price * eur["open"]
-    result["Price"] = price
-    result["Sektor"] = info.get("sector", None)
-    result["Standort"] = info.get("country", None)
-
-    return result

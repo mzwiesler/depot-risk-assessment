@@ -1,47 +1,52 @@
+import os
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# Load dataset
-df = pd.read_csv("./data/depot_merged.csv")
+DATA_PATH = os.environ.get("DEPOT_MERGED_PATH", "./data/depot_merged.csv")
 
-# Streamlit app
+
+@st.cache_data
+def load_data(path: str) -> pd.DataFrame:
+    return pd.read_csv(path)
+
+
 st.title("Interactive Dashboard Example")
 
-# Create two columns for multi-select dropdowns
+try:
+    df = load_data(DATA_PATH)
+except FileNotFoundError:
+    st.error(
+        f"Data file not found at `{DATA_PATH}`. "
+        "Run the pipeline first: `.venv/bin/python -m depot_risk_assessment.main`"
+    )
+    st.stop()
+
 col1, col2, col3 = st.columns(3)
 
-# Multi-select for Standort with "All" option
-standort_options = df["Standort"].unique().tolist()
+standort_options = sorted([x for x in df["Standort"].dropna().unique().tolist()])
 with col1:
     selected_standort = st.multiselect("Select Standort:", options=standort_options, default=standort_options)
 
-# Multi-select for Sektor with "All" option
-sektor_options = df["Sektor"].unique().tolist()
+sektor_options = sorted([x for x in df["Sektor"].dropna().unique().tolist()])
 with col2:
     selected_sektor = st.multiselect("Select Sektor:", options=sektor_options, default=sektor_options)
 
-# Multi-select for Type with "All" option
-type_options = df["Type"].unique().tolist()
+type_options = sorted([x for x in df["Type"].dropna().unique().tolist()])
 with col3:
     selected_type = st.multiselect("Select Type:", options=type_options, default=type_options)
 
-
-# Filter dataframe based on selections
 filtered_df = df[
     (df["Standort"].isin(selected_standort)) & (df["Sektor"].isin(selected_sektor)) & (df["Type"].isin(selected_type))
 ]
 
-
-# Calculate total Wert
 total_wert = filtered_df["Wert"].sum()
 grouped_wert = filtered_df.groupby(["Name"]).agg({"Wert": "sum"})["Wert"].to_frame()
 grouped_wert.reset_index(inplace=True)
 
-# Display total Wert in euros
 st.metric(label="Total Wert", value=f"€{total_wert:,.2f}")
 
-# Display types as pie chart
 type_pie_chart = px.pie(
     filtered_df,
     names="Type",
@@ -55,7 +60,6 @@ type_pie_chart.update_layout(hoverlabel=dict(font_size=20))
 st.plotly_chart(type_pie_chart)
 
 col1, col2 = st.columns(2)
-# Dropdown menu for selecting display mode
 with col1:
     display_mode = st.selectbox("Select display mode:", ["Wert_Percentage", "Wert"])
 with col2:
@@ -66,8 +70,8 @@ with col2:
         value=10,
         step=1,
     )
-# Top N Names by display_mode
-grouped_wert["Wert_Percentage"] = grouped_wert["Wert"] / total_wert * 100
+
+grouped_wert["Wert_Percentage"] = grouped_wert["Wert"] / total_wert * 100 if total_wert > 0 else 0
 top_names_df = grouped_wert.nlargest(num_top_names, display_mode)
 bar_chart = px.bar(
     top_names_df,
@@ -78,10 +82,8 @@ bar_chart = px.bar(
 bar_chart.update_layout(hoverlabel=dict(font_size=16))
 st.plotly_chart(bar_chart)
 
-# Create two columns for pie charts
 col1, col2 = st.columns(2)
 
-# Pie chart by Sektor
 with col1:
     sector_pie_chart = px.pie(
         filtered_df,
@@ -94,7 +96,6 @@ with col1:
     sector_pie_chart.update_layout(hoverlabel=dict(font_size=16))
     st.plotly_chart(sector_pie_chart)
 
-# Pie chart by Standort
 with col2:
     standort_pie_chart = px.pie(
         filtered_df,
