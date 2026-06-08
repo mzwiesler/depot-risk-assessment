@@ -1,7 +1,11 @@
+import logging
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from pathlib import Path
 import time
+
+logger = logging.getLogger(__name__)
 
 
 def download_hanetf_report(url: str, download_directory: str | None = None) -> bool:
@@ -38,17 +42,17 @@ def download_hanetf_report(url: str, download_directory: str | None = None) -> b
     driver = webdriver.Chrome(options=options)
 
     try:
-        print(f"Navigating to {url}...")
+        logger.info(f"Navigating to {url}...")
         driver.get(url)
 
         # Wait for page to load
-        print("Waiting for page to load and download to start...")
+        logger.info("Waiting for page to load and download to start...")
         time.sleep(3)
 
         return True
 
     except Exception as e:
-        print(f"✗ Error during download: {e}")
+        logger.exception(f"Error during download: {e}")
         return False
 
     finally:
@@ -61,6 +65,6 @@ if __name__ == "__main__":
     download_directory = "./downloads"
     success = download_hanetf_report(url, download_directory)
     if success:
-        print("Download completed successfully!")
+        logger.info("Download completed successfully!")
     else:
-        print("Download failed.")
+        logger.warning("Download failed.")

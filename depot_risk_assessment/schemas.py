@@ -20,5 +20,4 @@ class MergedPosition(TypedDict):
     Type: str
 
 
-NORMALIZED_REQUIRED_COLUMNS = ["Name", "Sektor", "Standort", "Gewichtung", "Wert"]
-MERGED_REQUIRED_COLUMNS = ["Emittententicker", "Standort", "Name", "Sektor", "Wert", "Type"]
+ISHARES_EDITOR = "iShares"

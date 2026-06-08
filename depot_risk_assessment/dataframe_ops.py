@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 def rescale(col: pd.Series) -> pd.Series:
-    return round(100 * col / sum(col), 8)
+    if col.sum() == 0:
+        return col
+    return round(100 * col / col.sum(), 8)
 
 
 def aggregate_gewichtung_by(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
@@ -50,6 +52,7 @@ def merge_and_drop_col(df: pd.DataFrame, col1: str, col2: str, new_col: str) -> 
 
 
 def prepare_data_by_isin(df: pd.DataFrame, ex_isin_info: pd.DataFrame, merge_cols: list[str]) -> pd.DataFrame:
+    """Enrich ISIN-keyed holdings with Yahoo Finance sector/country data and deduplicate."""
     merged_isin = df.copy()
     if "Wert_x" in merged_isin.columns or "Wert_y" in merged_isin.columns:
         merged_isin = sum_and_replace(merged_isin, "Wert")
@@ -70,6 +73,7 @@ def prepare_data_by_isin(df: pd.DataFrame, ex_isin_info: pd.DataFrame, merge_col
 
 
 def prepare_data_by_ticker(df: pd.DataFrame) -> pd.DataFrame:
+    """Collapse ticker-keyed iShares holdings by summing values and resolving duplicate name columns."""
     df["Name"] = df["Name_x"].fillna(df["Name_y"])
     df = sum_and_replace(df, "Wert")
     df = merge_and_drop_col(df, "Name_x", "Name_y", "Name")
@@ -79,8 +83,6 @@ def prepare_data_by_ticker(df: pd.DataFrame) -> pd.DataFrame:
     df = df.merge(df_grouped, on="Name", how="left")
     multiple_ticker = df.groupby("Emittententicker").agg({"Name": "count", "Sektor": "count", "Standort": "count"})
     multiple_ticker = multiple_ticker[multiple_ticker["Name"] > 1]
-    df[df["Emittententicker"].isin(multiple_ticker.index)]
-    df[df["Standort"].isna()]
     df["Type"] = "ETF"
     return df
 

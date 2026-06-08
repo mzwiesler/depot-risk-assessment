@@ -1,3 +1,5 @@
+import logging
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -5,6 +7,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def download_amundi_report(url: str, download_directory: str | None = None) -> bool:
@@ -41,9 +45,9 @@ def download_amundi_report(url: str, download_directory: str | None = None) -> b
         try:
             popup_priv = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Privatanleger')]")))
             popup_priv.click()
-            print("Closed popup disclaimer.")
+            logger.info("Closed popup disclaimer.")
         except Exception:
-            print("Popup disclaimer not shown.")
+            logger.info("Popup disclaimer not shown.")
 
         # --- 2. Close sticky header disclaimer ---
         try:
@@ -53,9 +57,9 @@ def download_amundi_report(url: str, download_directory: str | None = None) -> b
                 )
             )
             sticky_priv.click()
-            print("Closed sticky header disclaimer.")
+            logger.info("Closed sticky header disclaimer.")
         except Exception:
-            print("Sticky header disclaimer not shown.")
+            logger.info("Sticky header disclaimer not shown.")
 
         # --- 3. Accept cookies ("Akzeptieren und fortfahren") ---
         try:
@@ -63,9 +67,9 @@ def download_amundi_report(url: str, download_directory: str | None = None) -> b
                 EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Akzeptieren und fortfahren')]"))
             )
             accept_cookies.click()
-            print("Cookie banner accepted.")
+            logger.info("Cookie banner accepted.")
         except Exception as e:
-            print("Cookie banner not shown or not clickable:", e)
+            logger.exception("Cookie banner not shown or not clickable: %s", e)
 
         # --- 4. Click on Akzeptieren (additional cookie consent) ---
         try:
@@ -74,9 +78,9 @@ def download_amundi_report(url: str, download_directory: str | None = None) -> b
                 EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Alle annehmen')]"))
             )
             akzeptieren_button.click()
-            print("Clicked Akzeptieren.")
+            logger.info("Clicked Akzeptieren.")
         except Exception as e:
-            print("Akzeptieren button not found or not clickable:", e)
+            logger.exception("Akzeptieren button not found or not clickable: %s", e)
 
         # --- 5. Click on Komponenten download button ---
         try:
@@ -90,18 +94,18 @@ def download_amundi_report(url: str, download_directory: str | None = None) -> b
             time.sleep(0.5)
             # Click using JavaScript
             driver.execute_script("arguments[0].click();", komponenten_button)
-            print("Clicked Komponenten download button.")
+            logger.info("Clicked Komponenten download button.")
 
             # Wait for download to start
             time.sleep(3)
             return True
 
         except Exception as e:
-            print(f"Komponenten button not found or not clickable: {e}")
+            logger.exception(f"Komponenten button not found or not clickable: {e}")
             return False
 
     except Exception as e:
-        print(f"Error during download: {e}")
+        logger.exception(f"Error during download: {e}")
         return False
 
     finally:
@@ -120,4 +124,4 @@ if __name__ == "__main__":
     url_msci_eur = "https://www.amundietf.de/de/professionell/products/equity/amundi-msci-europe-sri-climate-paris-aligned-ucits-etf-dr-c/lu1861137484#at_medium=Sponsored%20links&at_campaign=Climate_DE&at_platform=google"
     success["msci_eur"] = download_amundi_report(url_msci_eur, download_directory)
     for key, success in success.items():
-        print(f"Download for {key} successful: {success}")
+        logger.info(f"Download for {key} successful: {success}")

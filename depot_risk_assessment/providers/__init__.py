@@ -1,4 +1,4 @@
-from depot_risk_assessment.providers._base import ETFProvider, get_provider, register  # noqa: F401
+from depot_risk_assessment.providers._base import ETFProvider, _finalize, get_provider, register  # noqa: F401
 
 # Import providers to trigger self-registration
 import depot_risk_assessment.providers.amundi  # noqa: F401

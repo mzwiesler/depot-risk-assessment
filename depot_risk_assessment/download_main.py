@@ -46,14 +46,14 @@ def download_wrapper(download_func: Callable[[str, str], bool]) -> Callable[[Tic
         logger.info(f"Found xlsx files: {[f.name for f in xlsx_files]}")
 
         if not xlsx_files:
-            print(f"No xlsx file found in {directory}")
+            logger.warning(f"No xlsx file found in {directory}")
             return False
 
         xlsx_file = xlsx_files[0]
         df = read_xlsx_file_without_styles(str(xlsx_file))
         target = pathlib.Path(directory) / f"{config.file_name}.csv"
         df.to_csv(target, index=False, header=False)
-        print(f"✓ Converted {xlsx_file.name} to {target}")
+        logger.info(f"Converted {xlsx_file.name} to {target}")
         return True
 
     return download_and_convert_xlsx
@@ -89,7 +89,7 @@ for config in ticker_configs:
 
 
 for ticker, status in success.items():
-    print(f"Download for {ticker} successful: {status}")
+    logger.info(f"Download for {ticker} successful: {status}")
 
 errors = []
 for ticker, status in success.items():
@@ -98,4 +98,4 @@ for ticker, status in success.items():
 if errors:
     raise Exception(f"Download errors occurred: {', '.join(errors)}")  # TODO: Create download exception
 
-print("All downloads completed successfully.")
+logger.info("All downloads completed successfully.")

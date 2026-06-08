@@ -10,6 +10,7 @@ from depot_risk_assessment.dataframe_ops import (
 )
 from depot_risk_assessment.etf_handling import ETFHandler
 from depot_risk_assessment.isin_cache import get_infos_from_yahoo
+from depot_risk_assessment.schemas import ISHARES_EDITOR
 from depot_risk_assessment.validation import (
     validate_editor,
     validate_ishare,
@@ -26,6 +27,7 @@ def process_isin_group(
     editor: str,
     merge_cols: list[str],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Merge all ETFs from a single ISIN-keyed provider and fetch missing Yahoo Finance entries."""
     etfs = [etf.zusammensetzung for etf in etf_handler.etfs if etf.ticker_config.editor == editor]
     if not etfs:
         return pd.DataFrame(), ex_isin_info
@@ -62,6 +64,7 @@ def merge_isin_group(
     ex_isin_info: pd.DataFrame,
     isin_editors: list[str],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Combine all ISIN-keyed provider groups into one enriched DataFrame, updating the ISIN cache."""
     merge_cols = ["Emittententicker", "Standort"]
     dfs: list[pd.DataFrame] = []
 
@@ -93,7 +96,8 @@ def merge_isin_group(
 
 
 def merge_ticker_group(etf_handler: ETFHandler) -> pd.DataFrame:
-    ticker_etfs = [etf.zusammensetzung for etf in etf_handler.etfs if etf.ticker_config.editor == "iShares"]
+    """Merge all iShares (ticker-keyed) ETFs into a single DataFrame and validate the total value."""
+    ticker_etfs = [etf.zusammensetzung for etf in etf_handler.etfs if etf.ticker_config.editor == ISHARES_EDITOR]
     if not ticker_etfs:
         return pd.DataFrame()
 
@@ -119,7 +123,10 @@ def merge_all_etfs(
     etf_handler: ETFHandler,
     ex_isin_info: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    isin_editors = list({etf.ticker_config.editor for etf in etf_handler.etfs if etf.ticker_config.editor != "iShares"})
+    """Combine ISIN-keyed and ticker-keyed ETF groups into the final merged holdings DataFrame."""
+    isin_editors = list(
+        {etf.ticker_config.editor for etf in etf_handler.etfs if etf.ticker_config.editor != ISHARES_EDITOR}
+    )
     isin_editors.sort()
 
     isin_merged, ex_isin_info = merge_isin_group(etf_handler, ex_isin_info, isin_editors)

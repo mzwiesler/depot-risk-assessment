@@ -2,8 +2,7 @@ import pathlib
 
 import pandas as pd
 
-from depot_risk_assessment.dataframe_ops import rescale
-from depot_risk_assessment.providers._base import register
+from depot_risk_assessment.providers._base import _finalize, register
 
 
 class InvescoProvider:
@@ -18,8 +17,7 @@ class InvescoProvider:
         df = df.rename(columns={"Full name": "Name", "Weight": "Gewichtung"})
         df["Name"] = df["Name"].str.split("USD").str[0].str.strip()
         df["ISIN"] = df["ISIN"].fillna(df["Name"])
-        df["Gewichtung"] = rescale(df["Gewichtung"])
-        df["Wert"] = round(df["Gewichtung"] * total_value / 100, 2)
+        df = _finalize(df, total_value)
         return df
 
 

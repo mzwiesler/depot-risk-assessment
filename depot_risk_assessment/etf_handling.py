@@ -12,7 +12,7 @@ class TickerConfig:
 
     wkn: str
     editor: str
-    url: str
+    url: str | None
     file_name: str
 
     def file_path(self, folder: pathlib.Path) -> pathlib.Path:
@@ -32,11 +32,19 @@ class ETFHandler:
 
     @classmethod
     def from_dict(
-        cls, etf_dict: dict, folder: str, depot: pd.DataFrame, sector_mapping: dict[str, str]
+        cls,
+        etf_dict: dict[str, dict[str, str]],
+        folder: str,
+        depot: pd.DataFrame,
+        sector_mapping: dict[str, str],
     ) -> "ETFHandler":
+        """Build an ETFHandler by reading and normalizing each ETF file listed in etf_dict."""
         etfs = []
         for key, value in etf_dict.items():
-            total_value_etf = depot[depot["wkn"] == key]["Wert"].values[0]
+            matches = depot[depot["wkn"] == key]["Wert"].values
+            if len(matches) == 0:
+                raise ValueError(f"WKN {key!r} not found in depot")
+            total_value_etf = matches[0]
             ticker_config = TickerConfig(
                 wkn=key, editor=value["editor"], url=value.get("url", None), file_name=value["file_name"]
             )

@@ -2,8 +2,7 @@ import pathlib
 
 import pandas as pd
 
-from depot_risk_assessment.dataframe_ops import rescale
-from depot_risk_assessment.providers._base import register
+from depot_risk_assessment.providers._base import _finalize, register
 
 
 class ISharesProvider:
@@ -21,8 +20,7 @@ class ISharesProvider:
         df["Sektor"] = df["Sektor"].str.strip()
         df["Gewichtung"] = df["Gewichtung"].str.replace("%", "").str.replace(",", ".").astype(float)
         df = df[df["Gewichtung"] != 0]
-        df["Gewichtung"] = rescale(df["Gewichtung"])
-        df["Wert"] = round(df["Gewichtung"] * total_value / 100, 2)
+        df = _finalize(df, total_value)
         return df
 
 

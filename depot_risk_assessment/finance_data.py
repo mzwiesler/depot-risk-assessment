@@ -28,7 +28,7 @@ def get_info_for(ticker: str) -> dict[str, str | float]:
     try:
         info = get_ticker_info(ticker)
     except Exception as e:
-        logger.warning(f"Failed to get info for {ticker}: {e}")
+        logger.exception(f"Failed to get info for {ticker}: {e}")
         return {"Price": float("nan"), "Sektor": None, "Standort": None}
 
     price = info.get("open", info.get("previousClose", 0))

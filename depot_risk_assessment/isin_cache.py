@@ -49,5 +49,5 @@ def get_infos_from_yahoo(df: pd.DataFrame, ex_info: pd.DataFrame) -> pd.DataFram
             new_data.append(y_info)
         return pd.DataFrame(new_data)
     except Exception as e:
-        logger.error(f"Error during ISIN resolution: {e}")
+        logger.exception(f"Error during ISIN resolution: {e}")
         return pd.DataFrame(new_data)

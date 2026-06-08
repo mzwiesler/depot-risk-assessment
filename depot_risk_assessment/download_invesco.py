@@ -1,3 +1,5 @@
+import logging
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -5,6 +7,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def download_invesco_report(url: str, download_directory: str | None = None) -> bool:
@@ -35,7 +39,7 @@ def download_invesco_report(url: str, download_directory: str | None = None) -> 
 
     try:
         # Step 1: Navigate directly to the product page
-        print("Step 1: Navigating to product page...")
+        logger.info("Step 1: Navigating to product page...")
         driver.get(url)
         wait = WebDriverWait(driver, 8)
         wait_short = WebDriverWait(driver, 4)
@@ -48,17 +52,17 @@ def download_invesco_report(url: str, download_directory: str | None = None) -> 
                 EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Alle cookies ablehnen')]"))
             )
             reject_cookies.click()
-            print("✓ Clicked 'Alle cookies ablehnen'.")
+            logger.info("Clicked 'Alle cookies ablehnen'.")
             time.sleep(2)
         except Exception:
-            print("Cookie dialog not shown.")
+            logger.info("Cookie dialog not shown.")
 
         # --- 2. Handle investor type selection modal (appears after cookies) ---
         try:
-            print("Step 2: Looking for investor type selection modal...")
+            logger.info("Step 2: Looking for investor type selection modal...")
             # Check if the country-splash modal is present
             wait_short.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'country-splash')]")))
-            print("✓ Found country-splash modal")
+            logger.info("Found country-splash modal")
 
             # Try to find and click the Privatanleger button
             try:
@@ -66,22 +70,22 @@ def download_invesco_report(url: str, download_directory: str | None = None) -> 
                     EC.element_to_be_clickable((By.XPATH, "//div[@data-audience='Privatanleger']//button"))
                 )
                 privatanleger_button.click()
-                print("✓ Clicked 'Privatanleger' button.")
+                logger.info("Clicked 'Privatanleger' button.")
                 time.sleep(1)  # Wait for modal to close and page to load
                 bestatigen_button = wait.until(
                     EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Bestätigen')]"))
                 )
                 bestatigen_button.click()
-                print("✓ Clicked 'Bestätigen' button.")
+                logger.info("Clicked 'Bestätigen' button.")
                 time.sleep(1)  # Wait for page to load
             except Exception:
                 # Fallback: ask user to do it manually
-                print(">>> Could not auto-click. Please select 'Privatanleger' in the browser window...")
+                logger.warning("Could not auto-click. Please select 'Privatanleger' in the browser window...")
                 input(">>> Press Enter after you have selected the investor type and the modal has closed...")
-                print("✓ User confirmed. Continuing...")
+                logger.info("User confirmed. Continuing...")
                 time.sleep(1)
         except Exception:
-            print("✓ Privatanleger modal not shown (likely already selected).")
+            logger.info("Privatanleger modal not shown (likely already selected).")
 
         # --- 3. Click on Daten extrahieren ---
         try:
@@ -94,7 +98,7 @@ def download_invesco_report(url: str, download_directory: str | None = None) -> 
                 try:
                     daten_button = driver.find_element(By.XPATH, selector)
                     if daten_button:
-                        print(f"Found 'Daten extrahieren' with selector: {selector}")
+                        logger.info(f"Found 'Daten extrahieren' with selector: {selector}")
                         break
                 except Exception:
                     continue
@@ -108,21 +112,21 @@ def download_invesco_report(url: str, download_directory: str | None = None) -> 
                 time.sleep(0.5)
                 # Click using JavaScript
                 driver.execute_script("arguments[0].click();", daten_button)
-                print("Clicked 'Daten extrahieren'.")
+                logger.info("Clicked 'Daten extrahieren'.")
 
                 # Wait for download to start
                 time.sleep(5)
                 return True
             else:
-                print("'Daten extrahieren' button not found with any selector.")
+                logger.warning("'Daten extrahieren' button not found with any selector.")
                 return False
 
         except Exception as e:
-            print(f"'Daten extrahieren' button not found or not clickable: {e}")
+            logger.exception(f"'Daten extrahieren' button not found or not clickable: {e}")
             return False
 
     except Exception as e:
-        print(f"Error during download: {e}")
+        logger.exception(f"Error during download: {e}")
         return False
 
     finally:
@@ -138,6 +142,6 @@ if __name__ == "__main__":
     download_directory = "./downloads"  # Optional: specify download directory
     success = download_invesco_report(url_nasdaq, download_directory)
     if success:
-        print("Download completed successfully!")
+        logger.info("Download completed successfully!")
     else:
-        print("Download failed.")
+        logger.warning("Download failed.")

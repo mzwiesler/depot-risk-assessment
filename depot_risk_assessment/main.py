@@ -97,13 +97,26 @@ def main(
 
 
 if __name__ == "__main__":
-    eval_date = "02.02.2026"
+    import argparse
+    import datetime
+
+    parser = argparse.ArgumentParser(description="Run depot risk assessment pipeline")
+    parser.add_argument(
+        "--eval-date",
+        default=datetime.date.today().strftime("%d.%m.%Y"),
+        help="Evaluation date (DD.MM.YYYY)",
+    )
+    parser.add_argument("--depot", default="./data/depot.csv", help="Path to depot CSV")
+    parser.add_argument("--isin-info", default="./data/isin_information.csv", help="Path to ISIN info cache CSV")
+    parser.add_argument("--source", default="./downloads", help="Path to ETF composition downloads folder")
+    parser.add_argument("--output", default="./data/depot_merged.csv", help="Path for output merged CSV")
+    args = parser.parse_args()
 
     main(
-        eval_date=eval_date,
-        path_to_depot="./data/depot.csv",
-        path_to_isin_info="./data/isin_information.csv",
-        source_path="./downloads",
-        sink_path="./data/depot_merged.csv",
+        eval_date=args.eval_date,
+        path_to_depot=args.depot,
+        path_to_isin_info=args.isin_info,
+        source_path=args.source,
+        sink_path=args.output,
         ticker_config=ticker_config,
     )
