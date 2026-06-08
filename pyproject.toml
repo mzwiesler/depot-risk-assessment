@@ -13,6 +13,9 @@ dependencies = [
     "yahooquery>=2.3.7",
     "yfinance>=1.1.0",
 ]
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
 exclude = [".git", ".venv", ".vscode"]
@@ -28,6 +31,9 @@ target-version = "py311"
 # McCabe complexity (`C901`) by default.
 select = ["E", "F", "ANN"]
 ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"]
 
 [tool.ruff.format]
 # Like Black, use double quotes for strings.
